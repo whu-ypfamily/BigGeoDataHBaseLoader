@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>cn.whu.ypfamily</groupId>
-    <artifactId>HBASEBulkLoad</artifactId>
+    <artifactId>BigGeoDataHBaseLoader</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <packaging>jar</packaging>
 
