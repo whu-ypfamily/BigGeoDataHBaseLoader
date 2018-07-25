@@ -1,6 +1,6 @@
-package cn.whu.ypfamily.HBaseBulkLoad;
+package cn.whu.ypfamily.BigGeoDataHBaseLoader.loader;
 
-import ch.hsr.geohash.GeoHash;
+import cn.whu.ypfamily.BigGeoDataHBaseLoader.util.LoaderUtil;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
@@ -20,26 +20,39 @@ import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.BasicConfigurator;
 
 import java.io.IOException;
+import java.util.Map;
 
-public class PointBulkLoader extends Configured implements Tool {
+/**
+ * Polygon类型数据导入
+ */
+public class PolygonLoader extends Configured implements Tool {
+
     public static void main(String[] args) throws Exception {
         BasicConfigurator.configure();
-        int result = ToolRunner.run(new Configuration(), new PointBulkLoader(), args);
+        int result = ToolRunner.run(new Configuration(), new PolygonLoader(), args);
         System.exit(result);
     }
 
-
     public int run(String[] args) throws Exception {
+        // 获取输入参数
+        if (args.length < 3) {
+            System.out.println(
+                    "Input " +
+                            "*<path in> " +
+                            "*<path out> " +
+                            "*<table name>"
+            );
+            return 0;
+        }
         Path inPath = new Path(args[0]);
         Path outPath = new Path(args[1]);
         String tableName = args[2];
 
-
         Configuration conf = this.getConf();
 
-        Job job = Job.getInstance(conf, "Point Bulk Load");
+        Job job = Job.getInstance(conf, "Polygon Bulk Load");
 
-        job.setJarByClass(PointBulkLoader.class);
+        job.setJarByClass(PolygonLoader.class);
 
         job.setMapperClass(BulkLoadMapper.class);
         job.setMapOutputKeyClass(ImmutableBytesWritable.class);
@@ -70,21 +83,13 @@ public class PointBulkLoader extends Configured implements Tool {
 
         @Override
         protected void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
-            String[] line = value.toString().split("\t");
-            String oid = line[0];
-            double lon = Double.valueOf(line[1]);
-            double lat = Double.valueOf(line[2]);
-            String geom = "Point(" + line[1] + " " + line[2] + ")";
-            String geo_hash = GeoHash.geoHashStringWithCharacterPrecision(lat, lon, 12);
-            String geom_type = "Point";
-            String tags = line[3];
-
-            Put p = new Put((geo_hash + "_" + oid).getBytes());
-            p.addColumn(geom_type.getBytes(), "the_geom".getBytes(), geom.getBytes());
-            p.addColumn(geom_type.getBytes(), "oid".getBytes(), oid.getBytes());
-            p.addColumn(geom_type.getBytes(), "tags".getBytes(), tags.getBytes());
-
-            context.write(new ImmutableBytesWritable(geo_hash.getBytes()), p);
+            Map<String, Object> m = LoaderUtil.loadLine(value.toString(), "Polygon");
+            if (m != null) {
+                String outKey = (String) m.get("key");
+                Put outValue = (Put) m.get("value");
+                context.write(new ImmutableBytesWritable(outKey.getBytes()), outValue);
+            }
         }
+
     }
 }

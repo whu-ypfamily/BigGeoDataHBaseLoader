@@ -1,6 +1,6 @@
-package cn.whu.ypfamily.HBaseBulkLoad;
+package cn.whu.ypfamily.BigGeoDataHBaseLoader.loader;
 
-import ch.hsr.geohash.GeoHash;
+import cn.whu.ypfamily.BigGeoDataHBaseLoader.util.LoaderUtil;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
@@ -18,31 +18,38 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.BasicConfigurator;
-import org.locationtech.jts.geom.Envelope;
-import org.locationtech.jts.geom.Geometry;
-import org.locationtech.jts.io.ParseException;
-import org.locationtech.jts.io.WKTReader;
 
 import java.io.IOException;
+import java.util.Map;
 
-public class PolygonBulkLoader extends Configured implements Tool {
+public class PolylineLoader extends Configured implements Tool {
 
     public static void main(String[] args) throws Exception {
         BasicConfigurator.configure();
-        int result = ToolRunner.run(new Configuration(), new PolygonBulkLoader(), args);
+        int result = ToolRunner.run(new Configuration(), new PolylineLoader(), args);
         System.exit(result);
     }
 
     public int run(String[] args) throws Exception {
+        // 获取输入参数
+        if (args.length < 3) {
+            System.out.println(
+                    "Input " +
+                            "*<path in> " +
+                            "*<path out> " +
+                            "*<table name>"
+            );
+            return 0;
+        }
         Path inPath = new Path(args[0]);
         Path outPath = new Path(args[1]);
         String tableName = args[2];
 
         Configuration conf = this.getConf();
 
-        Job job = Job.getInstance(conf, "Polygon Bulk Load");
+        Job job = Job.getInstance(conf, "Polyline Bulk Load");
 
-        job.setJarByClass(PolygonBulkLoader.class);
+        job.setJarByClass(PolylineLoader.class);
 
         job.setMapperClass(BulkLoadMapper.class);
         job.setMapOutputKeyClass(ImmutableBytesWritable.class);
@@ -73,45 +80,11 @@ public class PolygonBulkLoader extends Configured implements Tool {
 
         @Override
         protected void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
-            String[] line = value.toString().split("\t");
-            String geom_wkt = line[0];
-            String oid = line[1];
-            String tags = line[2];
-            String geom_type = "Polygon";
-            if (geom_wkt.length() < 1 || !geom_wkt.contains("POLYGON") || geom_wkt.contains("EMPTY")) {
-                return;
-            }
-
-            try {
-                Geometry geom = new WKTReader().read(geom_wkt);
-                if (geom == null) {
-                    return;
-                }
-
-                Envelope env = geom.getEnvelopeInternal();
-                Double minX = env.getMinX();
-                Double maxX = env.getMaxX();
-                Double minY = env.getMinY();
-                Double maxY = env.getMaxY();
-
-                String[] arrGeoHashes = {
-                        GeoHash.geoHashStringWithCharacterPrecision(minY, minX, 12),
-                        GeoHash.geoHashStringWithCharacterPrecision(minY, maxX, 12),
-                        GeoHash.geoHashStringWithCharacterPrecision(maxY, maxX, 12),
-                        GeoHash.geoHashStringWithCharacterPrecision(maxY, minX, 12)
-                };
-                String strGeoHash = TextUtil.longestCommonPrefix(arrGeoHashes);
-
-                String geo_rowKey = strGeoHash + "_" + oid;
-
-                Put p = new Put(geo_rowKey.getBytes());
-                p.addColumn(geom_type.getBytes(), "the_geom".getBytes(), geom_wkt.getBytes());
-                p.addColumn(geom_type.getBytes(), "oid".getBytes(), oid.getBytes());
-                p.addColumn(geom_type.getBytes(), "tags".getBytes(), tags.getBytes());
-
-                context.write(new ImmutableBytesWritable(geo_rowKey.getBytes()), p);
-            } catch (ParseException e) {
-                e.printStackTrace();
+            Map<String, Object> m = LoaderUtil.loadLine(value.toString(), "Polyline");
+            if (m != null) {
+                String outKey = (String) m.get("key");
+                Put outValue = (Put) m.get("value");
+                context.write(new ImmutableBytesWritable(outKey.getBytes()), outValue);
             }
         }
 

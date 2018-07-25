@@ -1,4 +1,4 @@
-package cn.whu.ypfamily.HBaseBulkLoad;
+package cn.whu.ypfamily.BigGeoDataHBaseLoader.loader;
 
 import ch.hsr.geohash.GeoHash;
 import org.apache.hadoop.conf.Configuration;
@@ -18,31 +18,46 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.BasicConfigurator;
-import org.locationtech.jts.geom.Envelope;
 import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.geom.Point;
 import org.locationtech.jts.io.ParseException;
+import org.locationtech.jts.io.WKBWriter;
 import org.locationtech.jts.io.WKTReader;
 
 import java.io.IOException;
 
-public class PolylineBulkLoader extends Configured implements Tool {
-
+/**
+ * Point类型输入
+ */
+public class PointLoader extends Configured implements Tool {
     public static void main(String[] args) throws Exception {
         BasicConfigurator.configure();
-        int result = ToolRunner.run(new Configuration(), new PolylineBulkLoader(), args);
+        int result = ToolRunner.run(new Configuration(), new PointLoader(), args);
         System.exit(result);
     }
 
+
     public int run(String[] args) throws Exception {
+        // 获取输入参数
+        if (args.length < 3) {
+            System.out.println(
+                    "Input " +
+                            "*<path in> " +
+                            "*<path out> " +
+                            "*<table name>"
+            );
+            return 0;
+        }
         Path inPath = new Path(args[0]);
         Path outPath = new Path(args[1]);
         String tableName = args[2];
 
+
         Configuration conf = this.getConf();
 
-        Job job = Job.getInstance(conf, "Polyline Bulk Load");
+        Job job = Job.getInstance(conf, "Point Bulk Load");
 
-        job.setJarByClass(PolylineBulkLoader.class);
+        job.setJarByClass(PointLoader.class);
 
         job.setMapperClass(BulkLoadMapper.class);
         job.setMapOutputKeyClass(ImmutableBytesWritable.class);
@@ -74,47 +89,28 @@ public class PolylineBulkLoader extends Configured implements Tool {
         @Override
         protected void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
             String[] line = value.toString().split("\t");
-            String geom_wkt = line[0];
-            String oid = line[1];
-            String tags = line[2];
-            String geom_type = "Polyline";
-            if (geom_wkt.length() < 1 || !geom_wkt.contains("LINESTRING")) {
-                return;
-            }
+            String oid = line[0];
 
+            // 获得GeoHash
+            double lon = Double.valueOf(line[1]);
+            double lat = Double.valueOf(line[2]);
+            String geom_wkt = "Point(" + line[1] + " " + line[2] + ")";
+            String geo_hash = GeoHash.geoHashStringWithCharacterPrecision(lat, lon, 12);
+            String geom_type = "Point";
+            String tags = line[3];
+
+            // 输出
             try {
                 Geometry geom = new WKTReader().read(geom_wkt);
-                if (geom == null) {
-                    return;
-                }
 
-                Envelope env = geom.getEnvelopeInternal();
-                Double minX = env.getMinX();
-                Double maxX = env.getMaxX();
-                Double minY = env.getMinY();
-                Double maxY = env.getMaxY();
-
-                String[] arrGeoHashes = {
-                        GeoHash.geoHashStringWithCharacterPrecision(minY, minX, 12),
-                        GeoHash.geoHashStringWithCharacterPrecision(minY, maxX, 12),
-                        GeoHash.geoHashStringWithCharacterPrecision(maxY, maxX, 12),
-                        GeoHash.geoHashStringWithCharacterPrecision(maxY, minX, 12)
-                };
-                String strGeoHash = TextUtil.longestCommonPrefix(arrGeoHashes);
-
-                String geo_rowKey = strGeoHash + "_" + oid;
-
-                Put p = new Put(geo_rowKey.getBytes());
-                p.addColumn(geom_type.getBytes(), "the_geom".getBytes(), geom_wkt.getBytes());
+                Put p = new Put((geo_hash + "_" + oid).getBytes());
+                p.addColumn(geom_type.getBytes(), "the_geom".getBytes(), new WKBWriter().write(geom));
                 p.addColumn(geom_type.getBytes(), "oid".getBytes(), oid.getBytes());
                 p.addColumn(geom_type.getBytes(), "tags".getBytes(), tags.getBytes());
-
-                context.write(new ImmutableBytesWritable(geo_rowKey.getBytes()), p);
-
+                context.write(new ImmutableBytesWritable(geo_hash.getBytes()), p);
             } catch (ParseException e) {
                 e.printStackTrace();
             }
         }
-
     }
 }
