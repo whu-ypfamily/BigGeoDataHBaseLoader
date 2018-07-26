@@ -83,7 +83,7 @@ public class PolygonLoader extends Configured implements Tool {
 
         @Override
         protected void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
-            Map<String, Object> m = LoaderUtil.loadLine(value.toString(), "Polygon");
+            Map<String, Object> m = LoaderUtil.loadLine(value.toString(), "Polygon", "POLYGON");
             if (m != null) {
                 String outKey = (String) m.get("key");
                 Put outValue = (Put) m.get("value");
