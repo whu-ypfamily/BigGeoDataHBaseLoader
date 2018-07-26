@@ -80,7 +80,7 @@ public class PolylineLoader extends Configured implements Tool {
 
         @Override
         protected void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
-            Map<String, Object> m = LoaderUtil.loadLine(value.toString(), "Polyline");
+            Map<String, Object> m = LoaderUtil.loadLine(value.toString(), "Polyline", "LINESTRING");
             if (m != null) {
                 String outKey = (String) m.get("key");
                 Put outValue = (Put) m.get("value");
