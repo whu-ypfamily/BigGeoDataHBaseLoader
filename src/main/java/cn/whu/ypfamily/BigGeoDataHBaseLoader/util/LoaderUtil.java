@@ -19,14 +19,14 @@ public class LoaderUtil {
      * @param geom_type 几何对象类型
      * @return 输出键值对
      */
-    public static Map<String, Object> loadLine(String line, String geom_type) {
+    public static Map<String, Object> loadLine(String line, String geom_type, String wkt_type) {
         // 获取值
         String[] values = line.split("\t");
         String geom_wkt = values[0];
         String oid = values[1];
         String tags = values[2];
         Map<String, Object> m = new HashMap<String, Object>();
-        if (geom_wkt.length() < 1 || !geom_wkt.contains(geom_type.toUpperCase()) || geom_wkt.contains("EMPTY")) {
+        if (geom_wkt.length() < 1 || !geom_wkt.contains(wkt_type) || geom_wkt.contains("EMPTY")) {
             return null;
         }
 
